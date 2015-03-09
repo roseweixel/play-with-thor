@@ -7,13 +7,14 @@ class CLI < Thor
   package_name "App"
   map "l" => :list
 
+  # just to test/experiment with commands
   desc "list [SEARCH]", "show a list of things"
   def list(search="")
     puts "List #{search}"
   end
 
-  desc "make_directory", "make a new directory"
-  option :noar, :type => :boolean
+  desc "make_sinatra_skeleton", "generate the skeleton of a new Sinatra app"
+  option :ar, :type => :boolean, :default => true
   # Pass in an empty string to avoid ArgumentError
   def make_sinatra_skeleton(name="", *resources)
     if name == ""
@@ -37,12 +38,12 @@ class CLI < Thor
       # generate Gemfile
       gemfile = File.new("#{name}/Gemfile", 'w')
       gemfile << "source 'http://rubygems.org'\n\ngem 'sinatra'"
-      gemfile << "\ngem 'activerecord', :require => 'active_record'\ngem 'sinatra-activerecord', :require => 'sinatra/activerecord'" unless options[:noar]
+      gemfile << "\ngem 'activerecord', :require => 'active_record'\ngem 'sinatra-activerecord', :require => 'sinatra/activerecord'" if options[:ar]
 
       # generate models
       resources.each do |resource|
         #binding.pry
-        options[:noar] ? make_model(name, resource) : make_model(name, resource, true)
+        options[:ar] ? make_model(name, resource, true) : make_model(name, resource)
         make_controller(name, resource)
       end
 
