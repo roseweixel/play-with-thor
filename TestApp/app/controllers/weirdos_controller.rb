@@ -1,2 +1,0 @@
-class WeirdosController < ApplicationController
-end
