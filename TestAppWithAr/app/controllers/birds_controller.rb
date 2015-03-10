@@ -1,2 +1,0 @@
-class BirdsController < ApplicationController
-end

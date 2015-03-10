@@ -4,6 +4,7 @@ require 'pry'
 require 'active_support/core_ext/string'
 
 class CLI < Thor
+
   package_name "App"
   map "l" => :list
 
@@ -26,27 +27,34 @@ class CLI < Thor
       make_directory "#{name}/app/models"
       make_directory "#{name}/app/controllers"
       make_directory "#{name}/app/views"
+      make_directory "#{name}/config"
       
-      ## Make top level files
+      ## Make standard files
+      # generate environment.rb
+      environment = File.new("#{name}/config/environment.rb", 'w')
+      environment << environment_contents(options[:ar])
+
       # generate config.ru
-      File.new("#{name}/config.ru", 'w')
+      config = File.new("#{name}/config.ru", 'w')
+      config << config_ru_contents(options[:ar])
 
       # generate application_controller.rb
       application_controller = File.new("#{name}/app/controllers/application_controller.rb", 'w')
       application_controller << "class ApplicationController < Sinatra::Base\nend"
-
+      
       # generate Gemfile
       gemfile = File.new("#{name}/Gemfile", 'w')
-      gemfile << "source 'http://rubygems.org'\n\ngem 'sinatra'"
-      gemfile << "\ngem 'activerecord', :require => 'active_record'\ngem 'sinatra-activerecord', :require => 'sinatra/activerecord'" if options[:ar]
+      gemfile << gemfile_contents(options[:ar])
 
       # generate models
       resources.each do |resource|
         #binding.pry
         options[:ar] ? make_model(name, resource, true) : make_model(name, resource)
         make_controller(name, resource)
+        config << "use #{controllerify(resource)}\n"
       end
 
+      config << "run ApplicationController"
     end
   end
 
@@ -71,6 +79,89 @@ class CLI < Thor
   end
 
   private
+    def environment_contents(ar=true)
+      template = <<-BLOCK
+ENV['SINATRA_ENV'] ||= "development"
+
+require 'bundler/setup'
+Bundler.require(:default, ENV['SINATRA_ENV'])
+
+<% if ar %>
+<%= active_record_connection_for_env %>
+<% end %>
+
+require_all 'app'
+      BLOCK
+
+      ERB.new(template, nil, '<>').result(binding)
+    end
+
+    def active_record_connection_for_env
+      <<-BLOCK
+ActiveRecord::Base.establish_connection(
+  :adapter => "sqlite3",
+  :database => "db/#{ENV['SINATRA_ENV']}.sqlite"
+)
+      BLOCK
+    end
+
+    def basic_gems
+      ["'sinatra'", "'rake'", "'require_all'", "'thin'", "'shotgun'", "'pry'"]
+    end
+
+    def db_gems
+      ["'activerecord', :require => 'active_record'", "'sinatra-activerecord', :require => 'sinatra/activerecord'"]
+    end
+
+    def test_gems
+      ["'rspec'", "'capybara'", "'rack-test'"]
+    end
+
+    def db_test_gems
+      ["'database_cleaner', git: 'https://github.com/bmabey/database_cleaner.git'"]
+    end
+
+    def gemfile_contents(ar=true)
+      #binding.pry
+      all_gems = ar ? basic_gems + db_gems : basic_gems
+      all_test_gems = ar ? test_gems + db_test_gems : test_gems
+
+      template = <<-BLOCK
+source 'http://rubygems.org'\n
+<% all_gems.each do |gem| %>
+gem <%= gem %>
+<% end %>
+
+group :test do
+<% all_test_gems.each do |test_gem| %>
+  gem <%= test_gem %>
+<% end %>
+end
+      BLOCK
+
+      ERB.new(template, nil, '<>').result(binding)
+    end
+
+    def config_ru_contents(ar=true)
+      template = <<-BLOCK
+require_relative './config/environment'
+
+<% if ar %>
+<%= config_ru_ar %>
+<% end %>
+      BLOCK
+
+      ERB.new(template, nil, '<>').result(binding)
+    end
+
+    def config_ru_ar
+      <<-BLOCK
+if ActiveRecord::Migrator.needs_migration?
+  raise 'Migrations are pending. Run `rake db:migrate` to resolve the issue.'
+end
+
+      BLOCK
+    end
 
     def make_files(name, model_name)
       make_directory "~/app/models/#{model_name}"
